@@ -44,7 +44,6 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center gap-6 mb-8">
           <img src="/logo.svg" alt="UsBest!" className="h-16" />
-          <h1 className="text-2xl font-display text-center">ようこそ</h1>
         </div>
 
         <Card>

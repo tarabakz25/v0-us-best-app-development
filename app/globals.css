@@ -78,7 +78,7 @@
 @theme inline {
   /* Updated font stack with Futura, Fugaz One, and Noto Sans JP */
   --font-sans: var(--font-noto-sans-jp), "Noto Sans JP", -apple-system, sans-serif;
-  --font-display: var(--font-fugaz-one), "Fugaz One", sans-serif;
+  --font-display: "Fugaz One", sans-serif;
   --font-heading: "futura-pt", "Futura PT", "Futura", sans-serif;
   --font-futura-100: "futura-pt", "Futura PT", "Futura", sans-serif;
 
