@@ -1,8 +1,8 @@
 import type React from "react"
 import type { Metadata } from "next"
 import { Noto_Sans_JP } from "next/font/google"
+import localFont from "next/font/local"
 import { Analytics } from "@vercel/analytics/next"
-import "@fontsource/fugaz-one"
 import "./globals.css"
 
 const notoSansJP = Noto_Sans_JP({
@@ -10,6 +10,20 @@ const notoSansJP = Noto_Sans_JP({
   variable: "--font-noto-sans-jp",
   weight: ["400", "500", "700"],
 })
+
+const fugazOne = localFont({
+  src: [
+    {
+      path: "../node_modules/@fontsource/fugaz-one/files/fugaz-one-latin-400-normal.woff2",
+      weight: "400",
+      style: "normal",
+    },
+  ],
+  variable: "--font-fugaz-one",
+  display: "swap",
+})
+
+
 
 export const metadata: Metadata = {
   title: "UsBest! - 共創型広告プラットフォーム",
@@ -30,7 +44,7 @@ export default function RootLayout({
       <head>
         <link rel="stylesheet" href="https://use.typekit.net/vza3sdw.css" />
       </head>
-      <body className={`${notoSansJP.variable} font-sans antialiased`}>
+      <body className={`${notoSansJP.variable} ${fugazOne.variable} font-sans antialiased`}>
         {children}
         <Analytics />
       </body>
