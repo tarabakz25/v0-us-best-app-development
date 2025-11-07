@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import Image from "next/image"
 
 export default function LoadingPage() {
   const router = useRouter()
@@ -20,12 +21,8 @@ export default function LoadingPage() {
 
   return (
     <div className="fixed inset-0 bg-gradient-to-br from-primary via-secondary to-primary flex items-center justify-center">
-      <div className="animate-pulse">
-        <div className="w-32 h-32 bg-white rounded-3xl flex items-center justify-center shadow-2xl">
-          <span className="text-5xl font-bold bg-gradient-to-br from-primary to-secondary bg-clip-text text-transparent">
-            UB
-          </span>
-        </div>
+      <div className="">
+        <Image src="/logo.svg" alt="UsBest Logo" width={200} height={200} className="drop-shadow-2xl" priority />
       </div>
     </div>
   )

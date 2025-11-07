@@ -76,8 +76,11 @@
 }
 
 @theme inline {
-  --font-sans: "Geist", "Geist Fallback";
-  --font-mono: "Geist Mono", "Geist Mono Fallback";
+  /* Updated font stack with Futura, Fugaz One, and Noto Sans JP */
+  --font-sans: var(--font-noto-sans-jp), "Noto Sans JP", -apple-system, sans-serif;
+  --font-display: "Fugaz One", "futura-pt", "Futura", sans-serif;
+  --font-heading: "futura-pt", "Futura", sans-serif;
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -122,6 +125,16 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+
+  /* Added utility classes for custom fonts */
+  .font-display {
+    font-family: var(--font-display);
+  }
+
+  .font-heading {
+    font-family: var(--font-heading);
+    font-weight: 100;
   }
 
   /* Hide scrollbar for smooth vertical scroll experience */

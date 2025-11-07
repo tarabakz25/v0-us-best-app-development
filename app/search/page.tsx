@@ -1,68 +1,102 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Input } from "@/components/ui/input"
 import { SearchIcon, X } from "lucide-react"
 import { BottomNav } from "@/components/bottom-nav"
 import { useRouter } from "next/navigation"
+import { createClient } from "@/lib/supabase/client"
 
-const mockResults = [
-  {
-    id: "1",
-    title: "ワイヤレスイヤホン",
-    brand: "TechSound",
-    imageUrl: "/wireless-earbuds.png",
-    tags: ["テック", "オーディオ"],
-  },
-  {
-    id: "2",
-    title: "エコ水筒",
-    brand: "GreenLife",
-    imageUrl: "/eco-water-bottle.jpg",
-    tags: ["エコ", "ライフスタイル"],
-  },
-  {
-    id: "3",
-    title: "スマートウォッチ",
-    brand: "FitTech",
-    imageUrl: "/smartwatch-lifestyle.png",
-    tags: ["テック", "フィットネス"],
-  },
-  {
-    id: "4",
-    title: "オーガニック化粧品",
-    brand: "NaturalBeauty",
-    imageUrl: "/organic-cosmetics.jpg",
-    tags: ["美容", "オーガニック"],
-  },
-  {
-    id: "5",
-    title: "ポータブルスピーカー",
-    brand: "SoundWave",
-    imageUrl: "/portable-speaker.png",
-    tags: ["テック", "オーディオ"],
-  },
-  {
-    id: "6",
-    title: "ヨガマット",
-    brand: "ZenFit",
-    imageUrl: "/rolled-yoga-mat.png",
-    tags: ["フィットネス", "ウェルネス"],
-  },
-]
+interface SearchResult {
+  id: string
+  type: "ad" | "remix" | "survey"
+  title: string
+  brand?: string
+  imageUrl: string
+  tags: string[]
+}
 
 export default function SearchPage() {
   const [searchQuery, setSearchQuery] = useState("")
+  const [results, setResults] = useState<SearchResult[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
+  const supabase = createClient()
+
+  useEffect(() => {
+    async function loadContent() {
+      setIsLoading(true)
+
+      // Fetch ads, remixes, and surveys
+      const [adsResult, remixesResult, surveysResult] = await Promise.all([
+        supabase.from("ads").select("*").order("created_at", { ascending: false }),
+        supabase.from("remixes").select("*").order("created_at", { ascending: false }),
+        supabase.from("surveys").select("*").order("created_at", { ascending: false }),
+      ])
+
+      const allResults: SearchResult[] = []
+
+      // Process ads
+      if (adsResult.data) {
+        adsResult.data.forEach((ad) => {
+          allResults.push({
+            id: ad.id,
+            type: "ad",
+            title: ad.title,
+            brand: ad.brand || undefined,
+            imageUrl: ad.media_url,
+            tags: ad.brand ? [ad.brand, "広告"] : ["広告"],
+          })
+        })
+      }
+
+      // Process remixes
+      if (remixesResult.data) {
+        remixesResult.data.forEach((remix) => {
+          allResults.push({
+            id: remix.id,
+            type: "remix",
+            title: remix.title,
+            imageUrl: remix.media_url,
+            tags: ["Remix", "UGC"],
+          })
+        })
+      }
+
+      // Process surveys
+      if (surveysResult.data) {
+        surveysResult.data.forEach((survey) => {
+          allResults.push({
+            id: survey.id,
+            type: "survey",
+            title: survey.title,
+            brand: survey.brand || undefined,
+            imageUrl: survey.media_url || "/placeholder.svg?height=400&width=300",
+            tags: survey.brand ? [survey.brand, "アンケート"] : ["アンケート"],
+          })
+        })
+      }
+
+      setResults(allResults)
+      setIsLoading(false)
+    }
+
+    loadContent()
+  }, [])
 
   const filteredResults = searchQuery
-    ? mockResults.filter(
+    ? results.filter(
         (item) =>
           item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          item.brand.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (item.brand && item.brand.toLowerCase().includes(searchQuery.toLowerCase())) ||
           item.tags.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase())),
       )
-    : mockResults
+    : results
+
+  const handleResultClick = (item: SearchResult) => {
+    // Navigate to home page with the content
+    router.push(`/home`)
+  }
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -86,31 +120,43 @@ export default function SearchPage() {
 
       {/* Results Grid - Pinterest style */}
       <div className="p-4">
-        <div className="columns-2 gap-4 space-y-4">
-          {filteredResults.map((item) => (
-            <div key={item.id} onClick={() => router.push("/home")} className="break-inside-avoid cursor-pointer group">
-              <div className="relative overflow-hidden rounded-xl bg-card shadow-sm transition-transform group-hover:scale-[1.02]">
-                <img
-                  src={item.imageUrl || "/placeholder.svg"}
-                  alt={item.title}
-                  className="w-full h-auto object-cover"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                <div className="p-3 space-y-1">
-                  <h3 className="font-semibold text-sm text-foreground text-balance">{item.title}</h3>
-                  <p className="text-xs text-muted-foreground">{item.brand}</p>
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {item.tags.map((tag) => (
-                      <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-                        {tag}
-                      </span>
-                    ))}
+        {isLoading ? (
+          <div className="text-center py-12 text-muted-foreground">読み込み中...</div>
+        ) : filteredResults.length === 0 ? (
+          <div className="text-center py-12 text-muted-foreground">
+            {searchQuery ? "検索結果が見つかりませんでした" : "コンテンツがありません"}
+          </div>
+        ) : (
+          <div className="columns-2 gap-4 space-y-4">
+            {filteredResults.map((item) => (
+              <div
+                key={item.id}
+                onClick={() => handleResultClick(item)}
+                className="break-inside-avoid cursor-pointer group"
+              >
+                <div className="relative overflow-hidden rounded-xl bg-card shadow-sm transition-transform group-hover:scale-[1.02]">
+                  <img
+                    src={item.imageUrl || "/placeholder.svg"}
+                    alt={item.title}
+                    className="w-full h-auto object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <div className="p-3 space-y-1">
+                    <h3 className="font-semibold text-sm text-foreground text-balance">{item.title}</h3>
+                    {item.brand && <p className="text-xs text-muted-foreground">{item.brand}</p>}
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {item.tags.map((tag) => (
+                        <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <BottomNav currentPage="search" />
