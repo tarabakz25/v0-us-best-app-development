@@ -57,10 +57,6 @@ export default function AccountPage() {
     router.push("/auth/login")
   }
 
-  if (isLoading) {
-    return <LoadingScreen message="プロフィールを読み込み中..." subtext="少々お待ちください" />
-  }
-
   const displayName = profile?.display_name || "ユーザー"
   const initials = displayName
     .split(" ")
@@ -70,7 +66,7 @@ export default function AccountPage() {
     .slice(0, 2)
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen bg-background pb-20 flex flex-col">
       {/* Profile Header */}
       <div className="bg-gradient-to-br from-primary to-secondary p-6 pb-12">
         <div className="flex items-center gap-4">
@@ -88,13 +84,18 @@ export default function AccountPage() {
         </div>
       </div>
 
-      {/* Menu Items */}
-      <div className="px-4 space-y-2 mt-4">
-        <MenuItem icon={<BarChart3 />} label="ダッシュボード" onClick={() => router.push("/dashboard")} />
-        <MenuItem icon={<Bell />} label="通知設定" onClick={() => {}} />
-        <MenuItem icon={<HelpCircle />} label="ヘルプ・お問い合わせ" onClick={() => {}} />
-        <MenuItem icon={<LogOut />} label="ログアウト" onClick={handleLogout} />
-      </div>
+      <main className="flex-1">
+        {isLoading ? (
+          <LoadingScreen className="py-24" />
+        ) : (
+          <div className="px-4 space-y-2 mt-4">
+            <MenuItem icon={<BarChart3 />} label="ダッシュボード" onClick={() => router.push("/dashboard")} />
+            <MenuItem icon={<Bell />} label="通知設定" onClick={() => {}} />
+            <MenuItem icon={<HelpCircle />} label="ヘルプ・お問い合わせ" onClick={() => {}} />
+            <MenuItem icon={<LogOut />} label="ログアウト" onClick={handleLogout} />
+          </div>
+        )}
+      </main>
 
       <BottomNav currentPage="account" />
     </div>

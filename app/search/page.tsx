@@ -95,16 +95,11 @@ export default function SearchPage() {
     : results
 
   const handleResultClick = (item: SearchResult) => {
-    // Navigate to home page with the content
-    router.push(`/home`)
-  }
-
-  if (isLoading) {
-    return <LoadingScreen message="コンテンツを検索中..." subtext="おすすめを準備しています" />
+    router.push(`/search/${item.type}/${item.id}`)
   }
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen bg-background pb-20 flex flex-col">
       {/* Search Header */}
       <div className="sticky top-0 z-10 bg-background border-b border-border px-4 py-4">
         <div className="relative">
@@ -123,44 +118,49 @@ export default function SearchPage() {
         </div>
       </div>
 
-      {/* Results Grid - Pinterest style */}
-      <div className="p-4">
-        {filteredResults.length === 0 ? (
-          <div className="text-center py-12 text-muted-foreground">
-            {searchQuery ? "検索結果が見つかりませんでした" : "コンテンツがありません"}
-          </div>
+      <main className="flex-1 w-full">
+        {isLoading ? (
+          <LoadingScreen className="py-24" />
         ) : (
-          <div className="columns-2 gap-4 space-y-4">
-            {filteredResults.map((item) => (
-              <div
-                key={item.id}
-                onClick={() => handleResultClick(item)}
-                className="break-inside-avoid cursor-pointer group"
-              >
-                <div className="relative overflow-hidden rounded-xl bg-card shadow-sm transition-transform group-hover:scale-[1.02]">
-                  <img
-                    src={item.imageUrl || "/placeholder.svg"}
-                    alt={item.title}
-                    className="w-full h-auto object-cover"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                  <div className="p-3 space-y-1">
-                    <h3 className="font-semibold text-sm text-foreground text-balance">{item.title}</h3>
-                    {item.brand && <p className="text-xs text-muted-foreground">{item.brand}</p>}
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {item.tags.map((tag) => (
-                        <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-                          {tag}
-                        </span>
-                      ))}
+          <div className="p-4">
+            {filteredResults.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                {searchQuery ? "検索結果が見つかりませんでした" : "コンテンツがありません"}
+              </div>
+            ) : (
+              <div className="columns-2 gap-4 space-y-4">
+                {filteredResults.map((item) => (
+                  <div
+                    key={item.id}
+                    onClick={() => handleResultClick(item)}
+                    className="break-inside-avoid cursor-pointer group"
+                  >
+                    <div className="relative overflow-hidden rounded-xl bg-card shadow-sm transition-transform group-hover:scale-[1.02]">
+                      <img
+                        src={item.imageUrl || "/placeholder.svg"}
+                        alt={item.title}
+                        className="w-full h-auto object-cover"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <div className="p-3 space-y-1">
+                        <h3 className="font-semibold text-sm text-foreground text-balance">{item.title}</h3>
+                        {item.brand && <p className="text-xs text-muted-foreground">{item.brand}</p>}
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {item.tags.map((tag) => (
+                            <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
         )}
-      </div>
+      </main>
 
       <BottomNav currentPage="search" />
     </div>

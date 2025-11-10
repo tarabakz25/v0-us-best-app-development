@@ -5,11 +5,18 @@ import { Button } from "@/components/ui/button"
 import { Heart, MessageCircle, Share2 } from "lucide-react"
 import { ProductSheet } from "@/components/product-sheet"
 import { SurveySheet } from "@/components/survey-sheet"
+import { CommentSheet } from "@/components/comment-sheet"
 import { BottomNav } from "@/components/bottom-nav"
 import { createClient } from "@/lib/supabase/client"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
 import { LoadingScreen } from "@/components/loading-screen"
+import {
+  createEmptySurveyResults,
+  transformSurveyResults,
+  type SurveyResultRow,
+  type SurveyResultsState,
+} from "@/lib/survey-results"
 
 interface SurveyQuestion {
   question: string
@@ -31,65 +38,13 @@ interface ContentItem {
   questions?: SurveyQuestion[]
 }
 
-interface SurveyResultRow {
-  question: string
-  option: string
-  vote_count: number
-  total_votes: number
-}
-
-interface SurveyResultsState {
-  totalResponses: number
-  questionResults: Record<
-    string,
-    {
-      totalVotes: number
-      options: Record<string, number>
-    }
-  >
-}
-
-const createEmptySurveyResults = (): SurveyResultsState => ({
-  totalResponses: 0,
-  questionResults: {},
-})
-
-const transformSurveyResults = (rows: SurveyResultRow[] | null): SurveyResultsState => {
-  if (!rows || rows.length === 0) {
-    return createEmptySurveyResults()
-  }
-
-  const questionResults: SurveyResultsState["questionResults"] = {}
-  const totalResponses = rows[0]?.total_votes ?? 0
-
-  rows.forEach((row) => {
-    const questionKey = row.question?.trim()
-    if (!questionKey) return
-
-    if (!questionResults[questionKey]) {
-      questionResults[questionKey] = {
-        totalVotes: row.total_votes ?? totalResponses,
-        options: {},
-      }
-    }
-
-    if (row.option) {
-      questionResults[questionKey].options[row.option] = Number(row.vote_count ?? 0)
-    }
-  })
-
-  return {
-    totalResponses,
-    questionResults,
-  }
-}
-
 export default function HomePage() {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [selectedProduct, setSelectedProduct] = useState<ContentItem | null>(null)
   const [content, setContent] = useState<ContentItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [userId, setUserId] = useState<string | null>(null)
+  const [activeCommentsTarget, setActiveCommentsTarget] = useState<ContentItem | null>(null)
   const [activeSurvey, setActiveSurvey] = useState<ContentItem | null>(null)
   const [surveyAnswers, setSurveyAnswers] = useState<Record<string, string>>({})
   const [isSurveySubmitting, setIsSurveySubmitting] = useState(false)
@@ -98,9 +53,12 @@ export default function HomePage() {
   const [isSurveyResultsLoading, setIsSurveyResultsLoading] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const isScrolling = useRef(false)
+  const hasAppliedSharedScroll = useRef(false)
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createClient()
   const { toast } = useToast()
+  const sharedContentId = searchParams?.get("contentId")
 
   useEffect(() => {
     async function loadContent() {
@@ -274,6 +232,24 @@ export default function HomePage() {
     container.addEventListener("scroll", handleScroll)
     return () => container.removeEventListener("scroll", handleScroll)
   }, [currentIndex, content.length])
+
+  useEffect(() => {
+    if (!sharedContentId || hasAppliedSharedScroll.current) return
+    if (content.length === 0) return
+
+    const targetIndex = content.findIndex((item) => item.id === sharedContentId)
+    if (targetIndex === -1) return
+
+    hasAppliedSharedScroll.current = true
+    const container = containerRef.current
+    if (container) {
+      container.scrollTo({
+        top: container.clientHeight * targetIndex,
+        behavior: "smooth",
+      })
+    }
+    setCurrentIndex(targetIndex)
+  }, [sharedContentId, content])
 
   const handleLike = async (item: ContentItem) => {
     if (!userId) {
@@ -449,8 +425,99 @@ export default function HomePage() {
     }
   }
 
+  const handleOpenComments = (item: ContentItem) => {
+    setActiveCommentsTarget(item)
+  }
+
+  const handleCommentAdded = (contentId: string) => {
+    setContent((prev) => prev.map((c) => (c.id === contentId ? { ...c, comments: c.comments + 1 } : c)))
+  }
+
+  const buildShareUrl = (item: ContentItem) => {
+    if (typeof window === "undefined") return ""
+    const url = new URL("/home", window.location.origin)
+    url.searchParams.set("contentId", item.id)
+    url.searchParams.set("type", item.type)
+    return url.toString()
+  }
+
+  const copyLinkToClipboard = async (text: string) => {
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+
+    if (typeof document === "undefined") return false
+
+    try {
+      const textarea = document.createElement("textarea")
+      textarea.value = text
+      textarea.style.position = "fixed"
+      textarea.style.opacity = "0"
+      textarea.style.left = "-9999px"
+      document.body.appendChild(textarea)
+      textarea.focus()
+      textarea.select()
+      const successful = document.execCommand("copy")
+      document.body.removeChild(textarea)
+      return successful
+    } catch {
+      return false
+    }
+  }
+
+  const handleShare = async (item: ContentItem) => {
+    if (typeof window === "undefined") return
+
+    const shareUrl = buildShareUrl(item)
+    try {
+      if (typeof navigator !== "undefined") {
+        const nav = navigator as Navigator & { share?: (data: ShareData) => Promise<void> }
+        if (typeof nav.share === "function") {
+          await nav.share({
+            title: item.title,
+            text: item.description,
+            url: shareUrl,
+          })
+          toast({
+            title: "シェアしました",
+            description: "共有ありがとうございます。",
+          })
+          return
+        }
+      }
+
+      const copied = await copyLinkToClipboard(shareUrl)
+      if (copied) {
+        toast({
+          title: "リンクをコピーしました",
+          description: "友だちに貼り付けてシェアできます。",
+        })
+      } else {
+        throw new Error("copy_failed")
+      }
+    } catch (error) {
+      if ((error as DOMException)?.name === "AbortError") {
+        return
+      }
+      console.error("Error sharing content:", error)
+      toast({
+        title: "シェアに失敗しました",
+        description: "恐れ入りますが、別の方法で共有してください。",
+        variant: "destructive",
+      })
+    }
+  }
+
   if (isLoading) {
-    return <LoadingScreen message="フィードを読み込み中..." subtext="あなた向けのコンテンツを取得しています" />
+    return (
+      <div className="flex min-h-screen flex-col bg-white">
+        <main className="flex-1 flex items-center justify-center px-6">
+          <LoadingScreen className="py-24" />
+        </main>
+        <BottomNav currentPage="home" />
+      </div>
+    )
   }
 
   if (content.length === 0) {
@@ -510,17 +577,28 @@ export default function HomePage() {
                 <span className="text-white text-xs font-medium">{item.likes}</span>
               </button>
 
-              <button className="flex flex-col items-center gap-1">
+              <button
+                type="button"
+                className="flex flex-col items-center gap-1"
+                onClick={() => handleOpenComments(item)}
+                aria-label="コメントを表示"
+              >
                 <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
                   <MessageCircle className="w-6 h-6 text-white" />
                 </div>
                 <span className="text-white text-xs font-medium">{item.comments}</span>
               </button>
 
-              <button className="flex flex-col items-center gap-1">
+              <button
+                type="button"
+                className="flex flex-col items-center gap-1"
+                onClick={() => handleShare(item)}
+                aria-label="コンテンツをシェア"
+              >
                 <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
                   <Share2 className="w-6 h-6 text-white" />
                 </div>
+                <span className="text-white text-xs font-medium">シェア</span>
               </button>
             </div>
           </div>
@@ -557,6 +635,22 @@ export default function HomePage() {
           results={surveyResults.questionResults}
           totalResponses={surveyResults.totalResponses}
           isResultsLoading={isSurveyResultsLoading}
+        />
+      )}
+
+      {activeCommentsTarget && (
+        <CommentSheet
+          contentId={activeCommentsTarget.id}
+          contentType={activeCommentsTarget.type}
+          contentTitle={activeCommentsTarget.title}
+          open={!!activeCommentsTarget}
+          onOpenChange={(open) => {
+            if (!open) {
+              setActiveCommentsTarget(null)
+            }
+          }}
+          currentUserId={userId}
+          onCommentAdded={() => handleCommentAdded(activeCommentsTarget.id)}
         />
       )}
     </div>
