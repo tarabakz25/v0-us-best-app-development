@@ -33,18 +33,26 @@ export default function SignUpPage() {
     }
 
     try {
-      const { error } = await supabase.auth.signUp({
+      const response = await fetch("/api/auth/sign-up", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password, displayName }),
+      })
+
+      const result = (await response.json().catch(() => null)) as { error?: string } | null
+      if (!response.ok) {
+        throw new Error(result?.error ?? "新規登録に失敗しました")
+      }
+
+      const { error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/home`,
-          data: {
-            display_name: displayName,
-          },
-        },
       })
-      if (error) throw error
-      router.push("/auth/check-email")
+      if (signInError) throw signInError
+      router.push("/home")
+      router.refresh()
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "エラーが発生しました")
     } finally {

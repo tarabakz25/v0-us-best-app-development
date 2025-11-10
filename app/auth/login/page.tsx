@@ -18,6 +18,14 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
 
+  const mapErrorMessage = (message: string) => {
+    if (message.toLowerCase().includes("invalid login credentials")) {
+      return "メールアドレスまたはパスワードが間違っています"
+    }
+
+    return message
+  }
+
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     const supabase = createClient()
@@ -33,7 +41,11 @@ export default function LoginPage() {
       router.push("/home")
       router.refresh()
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "エラーが発生しました")
+      if (error instanceof Error) {
+        setError(mapErrorMessage(error.message))
+      } else {
+        setError("エラーが発生しました")
+      }
     } finally {
       setIsLoading(false)
     }

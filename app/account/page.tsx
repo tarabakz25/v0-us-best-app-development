@@ -9,6 +9,7 @@ import { BottomNav } from "@/components/bottom-nav"
 import { ChevronRight, BarChart3, Settings, Bell, HelpCircle, LogOut } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
+import { LoadingScreen } from "@/components/loading-screen"
 
 interface UserProfile {
   id: string
@@ -57,11 +58,7 @@ export default function AccountPage() {
   }
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-background">
-        <div>読み込み中...</div>
-      </div>
-    )
+    return <LoadingScreen message="プロフィールを読み込み中..." subtext="少々お待ちください" />
   }
 
   const displayName = profile?.display_name || "ユーザー"

@@ -4,9 +4,17 @@ import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Heart, MessageCircle, Share2 } from "lucide-react"
 import { ProductSheet } from "@/components/product-sheet"
+import { SurveySheet } from "@/components/survey-sheet"
 import { BottomNav } from "@/components/bottom-nav"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
+import { useToast } from "@/hooks/use-toast"
+import { LoadingScreen } from "@/components/loading-screen"
+
+interface SurveyQuestion {
+  question: string
+  options: string[]
+}
 
 interface ContentItem {
   id: string
@@ -20,6 +28,7 @@ interface ContentItem {
   shopUrl?: string
   reviews?: Array<{ user: string; rating: number; text: string }>
   isLiked?: boolean
+  questions?: SurveyQuestion[]
 }
 
 export default function HomePage() {
@@ -28,156 +37,141 @@ export default function HomePage() {
   const [content, setContent] = useState<ContentItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [userId, setUserId] = useState<string | null>(null)
+  const [activeSurvey, setActiveSurvey] = useState<ContentItem | null>(null)
+  const [surveyAnswers, setSurveyAnswers] = useState<Record<string, string>>({})
+  const [isSurveySubmitting, setIsSurveySubmitting] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const isScrolling = useRef(false)
   const router = useRouter()
   const supabase = createClient()
+  const { toast } = useToast()
 
   useEffect(() => {
     async function loadContent() {
       setIsLoading(true)
 
-      // Get current user
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      setUserId(user?.id || null)
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+        setUserId(user?.id || null)
 
-      // Fetch ads, remixes, and surveys
-      const [adsResult, remixesResult, surveysResult] = await Promise.all([
-        supabase.from("ads").select("*").order("created_at", { ascending: false }),
-        supabase.from("remixes").select("*").order("created_at", { ascending: false }),
-        supabase.from("surveys").select("*").order("created_at", { ascending: false }),
-      ])
-
-      // Fetch likes count for each content
-      const allContent: ContentItem[] = []
-
-      // Process ads
-      if (adsResult.data) {
-        for (const ad of adsResult.data) {
-          const { count: likesCount } = await supabase
+        const likedContentKeys = new Set<string>()
+        if (user) {
+          const { data: likedRows, error: likedError } = await supabase
             .from("likes")
-            .select("*", { count: "exact", head: true })
-            .eq("content_type", "ad")
-            .eq("content_id", ad.id)
+            .select("content_type, content_id")
+            .eq("user_id", user.id)
 
-          const { count: commentsCount } = await supabase
-            .from("comments")
-            .select("*", { count: "exact", head: true })
-            .eq("content_type", "ad")
-            .eq("content_id", ad.id)
-
-          let isLiked = false
-          if (user) {
-            const { data: likeData } = await supabase
-              .from("likes")
-              .select("*")
-              .eq("user_id", user.id)
-              .eq("content_type", "ad")
-              .eq("content_id", ad.id)
-              .single()
-            isLiked = !!likeData
+          if (likedError) {
+            console.error("Error fetching liked content:", likedError)
+          } else {
+            likedRows?.forEach((row) => likedContentKeys.add(`${row.content_type}:${row.content_id}`))
           }
-
-          allContent.push({
-            id: ad.id,
-            type: "ad",
-            title: ad.title,
-            description: ad.description,
-            brand: ad.brand || undefined,
-            mediaUrl: ad.media_url,
-            shopUrl: ad.shop_url || undefined,
-            likes: likesCount || 0,
-            comments: commentsCount || 0,
-            isLiked,
-          })
         }
-      }
 
-      // Process remixes
-      if (remixesResult.data) {
-        for (const remix of remixesResult.data) {
-          const { count: likesCount } = await supabase
-            .from("likes")
-            .select("*", { count: "exact", head: true })
-            .eq("content_type", "remix")
-            .eq("content_id", remix.id)
+        const [adsResult, remixesResult, surveysResult] = await Promise.all([
+          supabase.from("ads").select("*").order("created_at", { ascending: false }),
+          supabase.from("remixes").select("*").order("created_at", { ascending: false }),
+          supabase.from("surveys").select("*").order("created_at", { ascending: false }),
+        ])
 
-          const { count: commentsCount } = await supabase
-            .from("comments")
-            .select("*", { count: "exact", head: true })
-            .eq("content_type", "remix")
-            .eq("content_id", remix.id)
+        if (adsResult.error) console.error("Error fetching ads:", adsResult.error)
+        if (remixesResult.error) console.error("Error fetching remixes:", remixesResult.error)
+        if (surveysResult.error) console.error("Error fetching surveys:", surveysResult.error)
 
-          let isLiked = false
-          if (user) {
-            const { data: likeData } = await supabase
+        const getEngagementCounts = async (contentType: ContentItem["type"], contentId: string) => {
+          const [likesResult, commentsResult] = await Promise.all([
+            supabase
               .from("likes")
-              .select("*")
-              .eq("user_id", user.id)
-              .eq("content_type", "remix")
-              .eq("content_id", remix.id)
-              .single()
-            isLiked = !!likeData
+              .select("*", { count: "exact", head: true })
+              .eq("content_type", contentType)
+              .eq("content_id", contentId),
+            supabase
+              .from("comments")
+              .select("*", { count: "exact", head: true })
+              .eq("content_type", contentType)
+              .eq("content_id", contentId),
+          ])
+
+          if (likesResult.error) console.error("Error fetching likes count:", likesResult.error)
+          if (commentsResult.error) console.error("Error fetching comments count:", commentsResult.error)
+
+          return {
+            likes: likesResult.count || 0,
+            comments: commentsResult.count || 0,
           }
-
-          allContent.push({
-            id: remix.id,
-            type: "remix",
-            title: remix.title,
-            description: remix.description,
-            mediaUrl: remix.media_url,
-            likes: likesCount || 0,
-            comments: commentsCount || 0,
-            isLiked,
-          })
         }
+
+        const adsContent = adsResult.data
+          ? await Promise.all(
+              adsResult.data.map(async (ad) => {
+                const { likes, comments } = await getEngagementCounts("ad", ad.id)
+                return {
+                  id: ad.id,
+                  type: "ad" as const,
+                  title: ad.title,
+                  description: ad.description,
+                  brand: ad.brand || undefined,
+                  mediaUrl: ad.media_url,
+                  shopUrl: ad.shop_url || undefined,
+                  likes,
+                  comments,
+                  isLiked: likedContentKeys.has(`ad:${ad.id}`),
+                }
+              }),
+            )
+          : []
+
+        const remixesContent = remixesResult.data
+          ? await Promise.all(
+              remixesResult.data.map(async (remix) => {
+                const { likes, comments } = await getEngagementCounts("remix", remix.id)
+                return {
+                  id: remix.id,
+                  type: "remix" as const,
+                  title: remix.title,
+                  description: remix.description,
+                  mediaUrl: remix.media_url,
+                  likes,
+                  comments,
+                  isLiked: likedContentKeys.has(`remix:${remix.id}`),
+                }
+              }),
+            )
+          : []
+
+        const surveysContent = surveysResult.data
+          ? await Promise.all(
+              surveysResult.data.map(async (survey) => {
+                const { likes, comments } = await getEngagementCounts("survey", survey.id)
+                return {
+                  id: survey.id,
+                  type: "survey" as const,
+                  title: survey.title,
+                  description: survey.description,
+                  brand: survey.brand || undefined,
+                  mediaUrl: survey.media_url || "/placeholder.svg?height=800&width=600",
+                  likes,
+                  comments,
+                  questions: Array.isArray(survey.questions) ? survey.questions : [],
+                  isLiked: likedContentKeys.has(`survey:${survey.id}`),
+                }
+              }),
+            )
+          : []
+
+        setContent([...adsContent, ...remixesContent, ...surveysContent])
+      } catch (error) {
+        console.error("Error loading content:", error)
+        toast({
+          title: "エラー",
+          description: "コンテンツの取得に失敗しました。",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoading(false)
       }
-
-      // Process surveys
-      if (surveysResult.data) {
-        for (const survey of surveysResult.data) {
-          const { count: likesCount } = await supabase
-            .from("likes")
-            .select("*", { count: "exact", head: true })
-            .eq("content_type", "survey")
-            .eq("content_id", survey.id)
-
-          const { count: commentsCount } = await supabase
-            .from("comments")
-            .select("*", { count: "exact", head: true })
-            .eq("content_type", "survey")
-            .eq("content_id", survey.id)
-
-          let isLiked = false
-          if (user) {
-            const { data: likeData } = await supabase
-              .from("likes")
-              .select("*")
-              .eq("user_id", user.id)
-              .eq("content_type", "survey")
-              .eq("content_id", survey.id)
-              .single()
-            isLiked = !!likeData
-          }
-
-          allContent.push({
-            id: survey.id,
-            type: "survey",
-            title: survey.title,
-            description: survey.description,
-            brand: survey.brand || undefined,
-            mediaUrl: survey.media_url || "/placeholder.svg?height=800&width=600",
-            likes: likesCount || 0,
-            comments: commentsCount || 0,
-            isLiked,
-          })
-        }
-      }
-
-      setContent(allContent)
-      setIsLoading(false)
     }
 
     loadContent()
@@ -209,29 +203,45 @@ export default function HomePage() {
       return
     }
 
-    const isLiked = item.isLiked
+    const isLiked = content.find((c) => c.id === item.id)?.isLiked
 
-    if (isLiked) {
-      // Unlike
-      await supabase
-        .from("likes")
-        .delete()
-        .eq("user_id", userId)
-        .eq("content_type", item.type)
-        .eq("content_id", item.id)
+    try {
+      if (isLiked) {
+        const { error } = await supabase
+          .from("likes")
+          .delete()
+          .eq("user_id", userId)
+          .eq("content_type", item.type)
+          .eq("content_id", item.id)
 
-      setContent((prev) =>
-        prev.map((c) => (c.id === item.id ? { ...c, likes: Math.max(0, c.likes - 1), isLiked: false } : c)),
-      )
-    } else {
-      // Like
-      await supabase.from("likes").insert({
-        user_id: userId,
-        content_type: item.type,
-        content_id: item.id,
+        if (error) throw error
+
+        setContent((prev) =>
+          prev.map((c) => (c.id === item.id ? { ...c, likes: Math.max(0, c.likes - 1), isLiked: false } : c)),
+        )
+      } else {
+        const { error } = await supabase
+          .from("likes")
+          .upsert(
+            {
+              user_id: userId,
+              content_type: item.type,
+              content_id: item.id,
+            },
+            { onConflict: "user_id,content_type,content_id", ignoreDuplicates: true },
+          )
+
+        if (error) throw error
+
+        setContent((prev) => prev.map((c) => (c.id === item.id ? { ...c, likes: c.likes + 1, isLiked: true } : c)))
+      }
+    } catch (error) {
+      console.error("Error toggling like:", error)
+      toast({
+        title: "エラー",
+        description: "いいねの更新に失敗しました。",
+        variant: "destructive",
       })
-
-      setContent((prev) => prev.map((c) => (c.id === item.id ? { ...c, likes: c.likes + 1, isLiked: true } : c)))
     }
   }
 
@@ -241,12 +251,125 @@ export default function HomePage() {
     }
   }
 
+  const handleSurveyButtonClick = async (item: ContentItem) => {
+    if (!item.questions || item.questions.length === 0) {
+      toast({
+        title: "回答できません",
+        description: "このアンケートには質問が設定されていません。",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!userId) {
+      router.push("/auth/login")
+      return
+    }
+
+    setActiveSurvey(item)
+    setSurveyAnswers({})
+
+    try {
+      const { data, error } = await supabase
+        .from("survey_responses")
+        .select("answers")
+        .eq("survey_id", item.id)
+        .eq("user_id", userId)
+        .maybeSingle()
+
+      if (error) throw error
+
+      if (data?.answers && Array.isArray(data.answers)) {
+        const restoredAnswers = (data.answers as Array<{ question?: string; answer?: string }>).reduce(
+          (acc, entry) => {
+            if (entry.question && entry.answer) {
+              acc[entry.question] = entry.answer
+            }
+            return acc
+          },
+          {} as Record<string, string>,
+        )
+
+        setSurveyAnswers(restoredAnswers)
+      }
+    } catch (error) {
+      console.error("Error fetching existing survey response:", error)
+    }
+  }
+
+  const handleSurveyAnswerSelect = (question: string, option: string) => {
+    setSurveyAnswers((prev) => ({ ...prev, [question]: option }))
+  }
+
+  const handleSurveySubmit = async () => {
+    if (!activeSurvey) return
+
+    if (!userId) {
+      router.push("/auth/login")
+      return
+    }
+
+    if (!activeSurvey.questions || activeSurvey.questions.length === 0) {
+      toast({
+        title: "回答できません",
+        description: "このアンケートには質問がありません。",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const unanswered = activeSurvey.questions.filter((q) => !surveyAnswers[q.question])
+    if (unanswered.length > 0) {
+      toast({
+        title: "未回答の質問があります",
+        description: "すべての質問に回答してください。",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsSurveySubmitting(true)
+
+    try {
+      const answersPayload = activeSurvey.questions.map((q) => ({
+        question: q.question,
+        answer: surveyAnswers[q.question],
+      }))
+
+      const { error } = await supabase
+        .from("survey_responses")
+        .upsert(
+          {
+            user_id: userId,
+            survey_id: activeSurvey.id,
+            answers: answersPayload,
+          },
+          { onConflict: "survey_id,user_id" },
+        )
+
+      if (error) throw error
+
+      toast({
+        title: "送信が完了しました",
+        description: "ご協力ありがとうございます。",
+      })
+
+      setActiveSurvey(null)
+      setSurveyAnswers({})
+    } catch (error) {
+      console.error("Error submitting survey response:", error)
+      toast({
+        title: "送信に失敗しました",
+        description: "時間を置いて再度お試しください。",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSurveySubmitting(false)
+    }
+  }
+
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-black">
-        <div className="text-white">読み込み中...</div>
-      </div>
-    )
+    return <LoadingScreen message="フィードを読み込み中..." subtext="あなた向けのコンテンツを取得しています" />
   }
 
   if (content.length === 0) {
@@ -288,7 +411,10 @@ export default function HomePage() {
               )}
 
               {item.type === "survey" && (
-                <Button className="bg-primary text-primary-foreground hover:bg-primary/90 mt-4">
+                <Button
+                  className="bg-primary text-primary-foreground hover:bg-primary/90 mt-4"
+                  onClick={() => handleSurveyButtonClick(item)}
+                >
                   アンケートに答える
                 </Button>
               )}
@@ -327,6 +453,23 @@ export default function HomePage() {
           product={selectedProduct}
           open={!!selectedProduct}
           onOpenChange={(open) => !open && setSelectedProduct(null)}
+        />
+      )}
+
+      {activeSurvey && (
+        <SurveySheet
+          survey={activeSurvey}
+          open={!!activeSurvey}
+          onOpenChange={(open) => {
+            if (!open) {
+              setActiveSurvey(null)
+              setSurveyAnswers({})
+            }
+          }}
+          selectedOptions={surveyAnswers}
+          onSelectOption={handleSurveyAnswerSelect}
+          onSubmit={handleSurveySubmit}
+          isSubmitting={isSurveySubmitting}
         />
       )}
     </div>

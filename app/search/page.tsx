@@ -6,6 +6,7 @@ import { SearchIcon, X } from "lucide-react"
 import { BottomNav } from "@/components/bottom-nav"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { LoadingScreen } from "@/components/loading-screen"
 
 interface SearchResult {
   id: string
@@ -98,6 +99,10 @@ export default function SearchPage() {
     router.push(`/home`)
   }
 
+  if (isLoading) {
+    return <LoadingScreen message="コンテンツを検索中..." subtext="おすすめを準備しています" />
+  }
+
   return (
     <div className="min-h-screen bg-background pb-20">
       {/* Search Header */}
@@ -120,9 +125,7 @@ export default function SearchPage() {
 
       {/* Results Grid - Pinterest style */}
       <div className="p-4">
-        {isLoading ? (
-          <div className="text-center py-12 text-muted-foreground">読み込み中...</div>
-        ) : filteredResults.length === 0 ? (
+        {filteredResults.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">
             {searchQuery ? "検索結果が見つかりませんでした" : "コンテンツがありません"}
           </div>

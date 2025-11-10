@@ -6,6 +6,7 @@ import { BottomNav } from "@/components/bottom-nav"
 import { BarChart3, Eye, Heart, TrendingUp, Users, MessageCircle, Award } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
+import { LoadingScreen } from "@/components/loading-screen"
 
 interface DashboardStats {
   totalLikes: number
@@ -133,11 +134,7 @@ export default function DashboardPage() {
   }, [])
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-background">
-        <div>読み込み中...</div>
-      </div>
-    )
+    return <LoadingScreen message="ダッシュボードを更新中..." subtext="最新の統計を取得しています" />
   }
 
   return (
