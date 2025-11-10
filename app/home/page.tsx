@@ -31,6 +31,59 @@ interface ContentItem {
   questions?: SurveyQuestion[]
 }
 
+interface SurveyResultRow {
+  question: string
+  option: string
+  vote_count: number
+  total_votes: number
+}
+
+interface SurveyResultsState {
+  totalResponses: number
+  questionResults: Record<
+    string,
+    {
+      totalVotes: number
+      options: Record<string, number>
+    }
+  >
+}
+
+const createEmptySurveyResults = (): SurveyResultsState => ({
+  totalResponses: 0,
+  questionResults: {},
+})
+
+const transformSurveyResults = (rows: SurveyResultRow[] | null): SurveyResultsState => {
+  if (!rows || rows.length === 0) {
+    return createEmptySurveyResults()
+  }
+
+  const questionResults: SurveyResultsState["questionResults"] = {}
+  const totalResponses = rows[0]?.total_votes ?? 0
+
+  rows.forEach((row) => {
+    const questionKey = row.question?.trim()
+    if (!questionKey) return
+
+    if (!questionResults[questionKey]) {
+      questionResults[questionKey] = {
+        totalVotes: row.total_votes ?? totalResponses,
+        options: {},
+      }
+    }
+
+    if (row.option) {
+      questionResults[questionKey].options[row.option] = Number(row.vote_count ?? 0)
+    }
+  })
+
+  return {
+    totalResponses,
+    questionResults,
+  }
+}
+
 export default function HomePage() {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [selectedProduct, setSelectedProduct] = useState<ContentItem | null>(null)
@@ -40,6 +93,9 @@ export default function HomePage() {
   const [activeSurvey, setActiveSurvey] = useState<ContentItem | null>(null)
   const [surveyAnswers, setSurveyAnswers] = useState<Record<string, string>>({})
   const [isSurveySubmitting, setIsSurveySubmitting] = useState(false)
+  const [hasSubmittedSurvey, setHasSubmittedSurvey] = useState(false)
+  const [surveyResults, setSurveyResults] = useState<SurveyResultsState>(() => createEmptySurveyResults())
+  const [isSurveyResultsLoading, setIsSurveyResultsLoading] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const isScrolling = useRef(false)
   const router = useRouter()
@@ -177,6 +233,28 @@ export default function HomePage() {
     loadContent()
   }, [])
 
+  const fetchSurveyResults = async (surveyId: string) => {
+    setIsSurveyResultsLoading(true)
+    try {
+      const { data, error } = await supabase.rpc("get_survey_results", {
+        p_survey_id: surveyId,
+      })
+
+      if (error) throw error
+
+      setSurveyResults(transformSurveyResults((data as SurveyResultRow[]) || []))
+    } catch (error) {
+      console.error("Error fetching survey results:", error)
+      toast({
+        title: "集計の取得に失敗しました",
+        description: "時間を置いて再度お試しください。",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSurveyResultsLoading(false)
+    }
+  }
+
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
@@ -268,6 +346,8 @@ export default function HomePage() {
 
     setActiveSurvey(item)
     setSurveyAnswers({})
+    setHasSubmittedSurvey(false)
+    setSurveyResults(createEmptySurveyResults())
 
     try {
       const { data, error } = await supabase
@@ -291,6 +371,8 @@ export default function HomePage() {
         )
 
         setSurveyAnswers(restoredAnswers)
+        setHasSubmittedSurvey(true)
+        await fetchSurveyResults(item.id)
       }
     } catch (error) {
       console.error("Error fetching existing survey response:", error)
@@ -353,9 +435,8 @@ export default function HomePage() {
         title: "送信が完了しました",
         description: "ご協力ありがとうございます。",
       })
-
-      setActiveSurvey(null)
-      setSurveyAnswers({})
+      setHasSubmittedSurvey(true)
+      await fetchSurveyResults(activeSurvey.id)
     } catch (error) {
       console.error("Error submitting survey response:", error)
       toast({
@@ -464,12 +545,18 @@ export default function HomePage() {
             if (!open) {
               setActiveSurvey(null)
               setSurveyAnswers({})
+              setHasSubmittedSurvey(false)
+              setSurveyResults(createEmptySurveyResults())
             }
           }}
           selectedOptions={surveyAnswers}
           onSelectOption={handleSurveyAnswerSelect}
           onSubmit={handleSurveySubmit}
           isSubmitting={isSurveySubmitting}
+          hasSubmitted={hasSubmittedSurvey}
+          results={surveyResults.questionResults}
+          totalResponses={surveyResults.totalResponses}
+          isResultsLoading={isSurveyResultsLoading}
         />
       )}
     </div>
