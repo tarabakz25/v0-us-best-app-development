@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { Suspense, useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Heart, MessageCircle, Share2 } from "lucide-react"
 import { ProductSheet } from "@/components/product-sheet"
@@ -38,7 +38,7 @@ interface ContentItem {
   questions?: SurveyQuestion[]
 }
 
-export default function HomePage() {
+function HomePageContent() {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [selectedProduct, setSelectedProduct] = useState<ContentItem | null>(null)
   const [content, setContent] = useState<ContentItem[]>([])
@@ -510,14 +510,7 @@ export default function HomePage() {
   }
 
   if (isLoading) {
-    return (
-      <div className="flex min-h-screen flex-col bg-white">
-        <main className="flex-1 flex items-center justify-center px-6">
-          <LoadingScreen className="py-24" />
-        </main>
-        <BottomNav currentPage="home" />
-      </div>
-    )
+    return <HomePageLoadingShell />
   }
 
   if (content.length === 0) {
@@ -653,6 +646,25 @@ export default function HomePage() {
           onCommentAdded={() => handleCommentAdded(activeCommentsTarget.id)}
         />
       )}
+    </div>
+  )
+}
+
+export default function HomePage() {
+  return (
+    <Suspense fallback={<HomePageLoadingShell />}>
+      <HomePageContent />
+    </Suspense>
+  )
+}
+
+function HomePageLoadingShell() {
+  return (
+    <div className="flex min-h-screen flex-col bg-white">
+      <main className="flex-1 flex items-center justify-center px-6">
+        <LoadingScreen className="py-24" />
+      </main>
+      <BottomNav currentPage="home" />
     </div>
   )
 }
