@@ -1,35 +1,41 @@
-"use client"
+"use client";
 
-import type React from "react"
+import type React from "react";
 
-import { createClient } from "@/lib/supabase/client"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { createClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 export default function SignUpPage() {
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [repeatPassword, setRepeatPassword] = useState("")
-  const [displayName, setDisplayName] = useState("")
-  const [error, setError] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const router = useRouter()
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [repeatPassword, setRepeatPassword] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
 
   const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const supabase = createClient()
-    setIsLoading(true)
-    setError(null)
+    e.preventDefault();
+    const supabase = createClient();
+    setIsLoading(true);
+    setError(null);
 
     if (password !== repeatPassword) {
-      setError("パスワードが一致しません")
-      setIsLoading(false)
-      return
+      setError("パスワードが一致しません");
+      setIsLoading(false);
+      return;
     }
 
     try {
@@ -39,26 +45,39 @@ export default function SignUpPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ email, password, displayName }),
-      })
+      });
 
-      const result = (await response.json().catch(() => null)) as { error?: string } | null
+      let result: { error?: string; success?: boolean } | null = null;
+      try {
+        result = await response.json();
+      } catch {
+        throw new Error("サーバーからの応答が無効です");
+      }
+
       if (!response.ok) {
-        throw new Error(result?.error ?? "新規登録に失敗しました")
+        throw new Error(result?.error ?? "新規登録に失敗しました");
       }
 
       const { error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
-      })
-      if (signInError) throw signInError
-      router.push("/home")
-      router.refresh()
+      });
+      if (signInError) throw signInError;
+      router.push("/home");
+      router.refresh();
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "エラーが発生しました")
+      console.error("Sign-up error:", error);
+      if (error instanceof Error) {
+        setError(error.message);
+      } else if (typeof error === "string") {
+        setError(error);
+      } else {
+        setError("予期しないエラーが発生しました");
+      }
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   return (
     <div className="flex min-h-screen w-full items-center justify-center p-6 bg-gradient-to-br from-primary/20 to-secondary/20">
@@ -125,7 +144,10 @@ export default function SignUpPage() {
 
               <div className="text-center text-sm">
                 すでにアカウントをお持ちの方は{" "}
-                <Link href="/auth/login" className="underline underline-offset-4 text-primary">
+                <Link
+                  href="/auth/login"
+                  className="underline underline-offset-4 text-primary"
+                >
                   ログイン
                 </Link>
               </div>
@@ -134,5 +156,5 @@ export default function SignUpPage() {
         </Card>
       </div>
     </div>
-  )
+  );
 }
