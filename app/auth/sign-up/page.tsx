@@ -1,8 +1,6 @@
 "use client";
 
-import type React from "react";
-
-import { createClient } from "@/lib/supabase/client";
+import { type FormEvent, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -15,7 +13,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
 
 export default function SignUpPage() {
   const [email, setEmail] = useState("");
@@ -26,11 +23,17 @@ export default function SignUpPage() {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
-  const handleSignUp = async (e: React.FormEvent) => {
+  const handleSignUp = async (e: FormEvent) => {
     e.preventDefault();
-    const supabase = createClient();
     setIsLoading(true);
     setError(null);
+
+    // クライアント側バリデーション
+    if (!email.trim() || !password.trim() || !displayName.trim()) {
+      setError("すべての項目を入力してください");
+      setIsLoading(false);
+      return;
+    }
 
     if (password !== repeatPassword) {
       setError("パスワードが一致しません");
@@ -38,8 +41,21 @@ export default function SignUpPage() {
       return;
     }
 
+    if (password.length < 6) {
+      setError("パスワードは6文字以上で設定してください");
+      setIsLoading(false);
+      return;
+    }
+
+    if (displayName.length > 50) {
+      setError("表示名は50文字以内で入力してください");
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      const response = await fetch("/api/auth/sign-up", {
+      // サインアップAPIを呼び出し
+      const signUpResponse = await fetch("/api/auth/sign-up", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -47,22 +63,38 @@ export default function SignUpPage() {
         body: JSON.stringify({ email, password, displayName }),
       });
 
-      let result: { error?: string; success?: boolean } | null = null;
+      let signUpResult: { error?: string; success?: boolean } | null = null;
       try {
-        result = await response.json();
+        signUpResult = await signUpResponse.json();
       } catch {
         throw new Error("サーバーからの応答が無効です");
       }
 
-      if (!response.ok) {
-        throw new Error(result?.error ?? "新規登録に失敗しました");
+      if (!signUpResponse.ok) {
+        throw new Error(signUpResult?.error ?? "新規登録に失敗しました");
       }
 
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      // 登録成功後、自動的にログイン
+      const signInResponse = await fetch("/api/auth/sign-in", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password }),
       });
-      if (signInError) throw signInError;
+
+      let signInResult: { error?: string; success?: boolean } | null = null;
+      try {
+        signInResult = await signInResponse.json();
+      } catch {
+        throw new Error("ログインに失敗しました");
+      }
+
+      if (!signInResponse.ok) {
+        throw new Error(signInResult?.error ?? "ログインに失敗しました");
+      }
+
+      // ログイン成功、ホームへリダイレクト
       router.push("/home");
       router.refresh();
     } catch (error: unknown) {

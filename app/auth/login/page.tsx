@@ -1,55 +1,74 @@
-"use client"
+"use client";
 
-import type React from "react"
-
-import { createClient } from "@/lib/supabase/client"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { type FormEvent, useState } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [error, setError] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const router = useRouter()
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
 
-  const mapErrorMessage = (message: string) => {
-    if (message.toLowerCase().includes("invalid login credentials")) {
-      return "メールアドレスまたはパスワードが間違っています"
+  const handleEmailLogin = async (e: FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError(null);
+
+    // クライアント側バリデーション
+    if (!email.trim() || !password.trim()) {
+      setError("メールアドレスとパスワードを入力してください");
+      setIsLoading(false);
+      return;
     }
-
-    return message
-  }
-
-  const handleEmailLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const supabase = createClient()
-    setIsLoading(true)
-    setError(null)
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
-      if (error) throw error
-      router.push("/home")
-      router.refresh()
+      const response = await fetch("/api/auth/sign-in", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      let result: { error?: string; success?: boolean } | null = null;
+      try {
+        result = await response.json();
+      } catch {
+        throw new Error("サーバーからの応答が無効です");
+      }
+
+      if (!response.ok) {
+        throw new Error(result?.error ?? "ログインに失敗しました");
+      }
+
+      // ログイン成功
+      router.push("/home");
+      router.refresh();
     } catch (error: unknown) {
+      console.error("Sign-in error:", error);
       if (error instanceof Error) {
-        setError(mapErrorMessage(error.message))
+        setError(error.message);
+      } else if (typeof error === "string") {
+        setError(error);
       } else {
-        setError("エラーが発生しました")
+        setError("予期しないエラーが発生しました");
       }
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   return (
     <div className="flex min-h-screen w-full items-center justify-center p-6 bg-gradient-to-br from-primary/20 to-secondary/20">
@@ -93,7 +112,10 @@ export default function LoginPage() {
 
               <div className="text-center text-sm mt-2">
                 アカウントをお持ちでない方は{" "}
-                <Link href="/auth/sign-up" className="underline underline-offset-4 text-primary">
+                <Link
+                  href="/auth/sign-up"
+                  className="underline underline-offset-4 text-primary"
+                >
                   新規登録
                 </Link>
               </div>
@@ -102,5 +124,5 @@ export default function LoginPage() {
         </Card>
       </div>
     </div>
-  )
+  );
 }

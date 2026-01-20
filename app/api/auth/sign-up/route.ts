@@ -55,6 +55,31 @@ export async function POST(request: Request) {
     );
   }
 
+  // メール形式のバリデーション
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    return NextResponse.json(
+      { error: "有効なメールアドレスを入力してください" },
+      { status: 400 },
+    );
+  }
+
+  // パスワード要件のバリデーション
+  if (password.length < 6) {
+    return NextResponse.json(
+      { error: "パスワードは6文字以上で設定してください" },
+      { status: 400 },
+    );
+  }
+
+  // 表示名の長さチェック
+  if (displayName.length < 1 || displayName.length > 50) {
+    return NextResponse.json(
+      { error: "表示名は1文字以上50文字以内で入力してください" },
+      { status: 400 },
+    );
+  }
+
   const supabase = createClient(url, serviceRoleKey, {
     auth: {
       autoRefreshToken: false,
